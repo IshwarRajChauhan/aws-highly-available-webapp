@@ -1,0 +1,169 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: AutoScaling Group demo WITHOUT Route53 (Free Tier safe)
+
+Parameters:
+  ImageID:
+    Type: String
+    Default: ami-07ff62358b87c7116
+
+  InstanceType:
+    Type: String
+    Default: t3.micro
+
+Resources:
+
+#Launch Template 
+  WebServerLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: WebserverTemplate
+      LaunchTemplateData:
+        ImageId:
+          Ref: ImageID
+        InstanceType:
+          Ref: InstanceType
+        UserData:
+         Fn::Base64:
+          Fn::Sub: |
+            #!/bin/bash
+            # WebApp version 2 styled page
+            yum update -y
+            yum install -y httpd
+            systemctl start httpd
+            systemctl enable httpd
+
+            cat << EOF > /var/www/html/index.html
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>Web App Demo</title>
+              <style>
+                body {
+                  margin: 0;
+                  height: 100vh;
+                  display: flex;
+                  justify-content: center;
+                  align-items: center;
+                  background: linear-gradient(135deg, #1e3c72, #2a5298);
+                  font-family: Arial, sans-serif;
+                  color: white;
+                }
+                .box {
+                  background: rgba(0,0,0,0.35);
+                  padding: 30px 40px;
+                  border-radius: 12px;
+                  text-align: center;
+                  box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+                }
+                h1 { margin-bottom: 15px; }
+                p { margin: 6px 0; }
+                span { color: #ffd369; font-weight: bold; }
+              </style>
+            </head>
+            <body>
+              <div class="box">
+                <h1> Web App Running</h1>
+                <p><span>Hostname:</span> $(hostname -f)</p>
+                <p><span>Instance IP:</span> $(hostname -I)</p>
+              </div>
+            </body>
+            </html>
+            EOF
+
+
+
+#Auto Scaling Group 
+  WebserverAutoScale:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: WebAppASG
+      MinSize: 1
+      MaxSize: 3
+      DesiredCapacity: 3
+      VPCZoneIdentifier:
+        - subnet-035e6eec024e87741
+        - subnet-0e94d1e7e5c0a1ed1
+        - subnet-0141b2cdb8475f298
+      TargetGroupARNs:
+        - Ref: ApplicationLoadBalancerTargetGroup
+      LaunchTemplate:
+        LaunchTemplateId:
+          Ref: WebServerLaunchTemplate
+        Version:
+          Fn::GetAtt:
+            - WebServerLaunchTemplate
+            - LatestVersionNumber
+
+#Load Balancer
+  AppLoadbalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: application
+      IpAddressType: ipv4
+      Subnets:
+        - subnet-035e6eec024e87741
+        - subnet-0e94d1e7e5c0a1ed1
+        - subnet-0141b2cdb8475f298
+
+  ApplicationLoadBalancerTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 80
+      Protocol: HTTP
+      TargetType: instance
+      VpcId: vpc-031814a8fffec0b4d
+
+  ApplicationLoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn:
+        Ref: AppLoadbalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn:
+            Ref: ApplicationLoadBalancerTargetGroup
+
+#CloudWatch
+  AppLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /demo/webapp
+      RetentionInDays: 1
+
+#SNS
+  SNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: Alerts
+
+  SNSSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: email
+      Endpoint: ishwarrajchauhanAWS@gmail.com
+      TopicArn:
+        Ref: SNSTopic
+
+#CloudWatch Alarm 
+  WebCloudwatchAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: HighCPUAlarm
+      AlarmDescription: Alarm when ASG CPU exceeds threshold
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 2
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: breaching
+      AlarmActions:
+        - Ref: SNSTopic
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value:
+            Ref: WebserverAutoScale
