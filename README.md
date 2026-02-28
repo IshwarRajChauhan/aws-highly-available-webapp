@@ -124,31 +124,6 @@ Refresh multiple times to see load balancing across instances.
 
 ---
 
-# How to Test CloudWatch Alarm
-
-### Step 1: Connect to EC2 instance (SSH)
-
-### Step 2: Run CPU stress command
-
-```
-yes > /dev/null
-```
-
-This increases CPU usage.
-
-### Step 3:
-- Wait ~5 minutes  
-- CloudWatch alarm should trigger  
-- Check email for SNS alert  
-
-Stop stress test:
-
-```
-CTRL + C
-```
-
----
-
 #  Free Tier Safety Notes
 
 - Uses `t3.micro`  
