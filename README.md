@@ -1,4 +1,4 @@
-## AWS Auto Scaling Web App** (CloudFormation – Free Tier Safe)
+## AWS Auto Scaling Web App  (CloudFormation – Free Tier Safe)
 
 Project Overview
 
@@ -19,6 +19,10 @@ Route53 is intentionally not used to keep it Free Tier safe.
 ---
 
 ##  Architecture Flow
+
+<p align="center">
+  <img src="architecture-diagram.png" width="800">
+</p>
 
 Client → Application Load Balancer → Target Group → Auto Scaling Group → EC2 Instances  
 CloudWatch → SNS → Email Alerts  
